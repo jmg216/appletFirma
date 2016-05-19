@@ -20,10 +20,10 @@ public class Signer {
     public static void main(String[] args) {
         JavaApplet jp = new JavaApplet();
         String firma = jp.firmarDirecto("true", 
-                "http://igdoctest02.isaltda.com.uy:80/appFirma/resources/applet.properties", 
+                "http://localhost:9000/ISCert/resources/imm/applet.properties",
                     "texto prueba", 
                         "Usuario Uno", 
-                            "a1234567");
+                            "54325432532");
         
         System.out.println("Firma realizada exitosamente: " + firma);
         //String isTrustedx, String ruta, String hashParam, String usuParam, String passParam

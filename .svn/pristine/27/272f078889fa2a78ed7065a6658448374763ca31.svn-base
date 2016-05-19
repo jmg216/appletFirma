@@ -1,0 +1,16 @@
+/*
+ * To change this template, choose Tools | Templates
+ * and open the template in the editor.
+ */
+package uy.com.isaltda.tokens.util;
+
+/**
+ *
+ * @author usuario
+ */
+public class Constantes {
+    public static final String MODELO_ALADDIN = "Aladdin";
+    public static final String MODELO_EPASS2003 = "ePass2003";
+    public static final String MODELO_EPASS3003AUTO = "ePass3003Auto";
+    public static final String MODELO_OTRO = "Otro";
+}

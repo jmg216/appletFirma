@@ -11,6 +11,7 @@ import appletaplication.utiles.UtilesResources;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Iterator;
+import java.util.List;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import javax.security.auth.login.LoginException;
@@ -32,21 +33,32 @@ public class HandlerToken {
             tokens = new ArrayList();
 
             String libraries = "";
+            List<String> librStr = new ArrayList<String>();
             if (OSValidator.isWindows()) {
                 libraries = UtilesResources.getProperty("appletConfig.LibrariesWin");
+                String[] strarray = Utiles.splitByCaracter(libraries, ",");
+                for (int i = 0; i < strarray.length; i++){
+                    //en windows concatenar programs 
+                    librStr.add( System.getenv("programfiles") + strarray[i]);
+                }
             }        
             if (OSValidator.isUnix()){
                 libraries = UtilesResources.getProperty("appletConfig.LibrariesUni");
+                String[] strarray = Utiles.splitByCaracter(libraries, ",");
+                for (int i = 0; i < strarray.length; i++){
+                    librStr.add(strarray[i]);
+                }
             }
-
-            String modulos = UtilesResources.getProperty("appletConfig.Modulos");
-
-            String[] modulosStr = Utiles.splitByCaracter(modulos, ",");
-            String[] librStr = Utiles.splitByCaracter(libraries, ",");
-
-            for (int i = 0; i < modulosStr.length; i++){
-                Token token = new Token(modulosStr[i], librStr[i]);
+            System.out.println("Env: " + UtilesResources.getProperty("appletConfig.SmartCardEnviroment"));
+            librStr.add( System.getenv( UtilesResources.getProperty("appletConfig.SmartCardEnviroment")));
+            
+            String modulo = UtilesResources.getProperty("appletConfig.Modulos");
+            for (String str : librStr){
+                Token token = new Token(modulo, str);
                 tokens.add(token);
+                if (token.isActivo()){
+                    break;
+                }
             }
         } 
         catch (IOException ex) {

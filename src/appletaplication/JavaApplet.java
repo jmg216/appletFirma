@@ -1798,7 +1798,7 @@ public class JavaApplet extends javax.swing.JApplet {
             }
             else{
                 if (KeyStoreValidator.isKeystoreToken()){
-                    tokenKeystore( new String(contra) );
+//                    tokenKeystore( new String(contra) );
                     firmar();
                 }                
             }
