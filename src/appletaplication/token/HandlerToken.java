@@ -31,17 +31,26 @@ public class HandlerToken {
     public HandlerToken()  {
         try{
             tokens = new ArrayList();
-
             String libraries = "";
+            //se cargans libs
             List<String> librStr = new ArrayList<String>();
             if (OSValidator.isWindows()) {
                 libraries = UtilesResources.getProperty("appletConfig.LibrariesWin");
-                String[] strarray = Utiles.splitByCaracter(libraries, ",");
-                for (int i = 0; i < strarray.length; i++){
-                    //en windows concatenar programs 
-                    librStr.add( System.getenv("programfiles") + strarray[i]);
+                String[] libsarray = Utiles.splitByCaracter(libraries, ",");
+                for (int i = 0; i < libsarray.length; i++){
+                    //librStr.add(strarray[i]);
+                    //En windows se agrega variable de entorno en caso de que la ruta no 
+                    //comience con c:
+                    if (!libsarray[i].startsWith("C:")){
+                        librStr.add( System.getenv("programfiles") + libsarray[i]);
+                    }
+                    else{
+                        //como comienza con C: se agrega toda la ruta.
+                        librStr.add( libsarray[i]);
+                    }
                 }
-            }        
+            }
+            
             if (OSValidator.isUnix()){
                 libraries = UtilesResources.getProperty("appletConfig.LibrariesUni");
                 String[] strarray = Utiles.splitByCaracter(libraries, ",");
@@ -49,16 +58,36 @@ public class HandlerToken {
                     librStr.add(strarray[i]);
                 }
             }
-            System.out.println("Env: " + UtilesResources.getProperty("appletConfig.SmartCardEnviroment"));
-            librStr.add( System.getenv( UtilesResources.getProperty("appletConfig.SmartCardEnviroment")));
-            
-            String modulo = UtilesResources.getProperty("appletConfig.Modulos");
-            for (String str : librStr){
-                Token token = new Token(modulo, str);
+            //se cargans modulos 1 a 1 con cada libs
+            String modulos = UtilesResources.getProperty("appletConfig.Modulos");
+            String[] modarray = Utiles.splitByCaracter(modulos, ",");
+            for (int i = 0; i < modarray.length; i++){
+                Token token = new Token(modarray[i], librStr.get(i));
                 tokens.add(token);
                 if (token.isActivo()){
                     break;
                 }
+            }
+            
+            //reviso de varible entonrno smart_card
+            boolean istokenactivo = false;
+            if (tokens != null){
+                Iterator<Token> it = tokens.iterator();
+                while (it.hasNext()){
+                    Token t = it.next();
+                    if (t.isActivo()){
+                        istokenactivo = t.isActivo();
+                        break;
+                    }
+                }
+            }
+            //En caso que no exista token/tarjeta activa se consulta por la variable de entrono SmartCard.
+            if (!istokenactivo){
+                String dllenv = System.getenv( UtilesResources.getProperty("appletConfig.SmartCardEnviroment"));
+                System.out.println("Env: " + dllenv);
+                //El se asigna un nombre de modulo. Es el mismo que el de la variable de entorno configurada.
+                Token token = new Token(UtilesResources.getProperty("appletConfig.SmartCardEnviroment"), dllenv);
+                tokens.add(token);
             }
         } 
         catch (IOException ex) {
