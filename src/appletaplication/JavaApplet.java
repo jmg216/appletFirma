@@ -28,6 +28,7 @@ import java.lang.reflect.Field;
 import java.net.URL;
 import java.security.GeneralSecurityException;
 import java.security.InvalidAlgorithmParameterException;
+import java.security.InvalidKeyException;
 import java.security.KeyStore;
 import java.security.KeyStoreException;
 import java.security.KeyStoreSpi;
@@ -37,8 +38,10 @@ import java.security.Principal;
 import java.security.PrivateKey;
 import java.security.Security;
 import java.security.Signature;
+import java.security.SignatureException;
 import java.security.UnrecoverableKeyException;
 import java.security.cert.Certificate;
+import java.security.cert.CertificateEncodingException;
 import java.security.cert.CertificateException;
 import java.security.cert.CertificateExpiredException;
 import java.security.cert.CertificateNotYetValidException;
@@ -56,15 +59,23 @@ import javax.swing.event.ListSelectionEvent;
 import javax.swing.event.ListSelectionListener;
 import javax.swing.table.DefaultTableModel;
 import netscape.javascript.JSObject;
+import org.bouncycastle.cert.jcajce.JcaCertStore;
 import org.bouncycastle.cms.CMSException;
 import org.bouncycastle.cms.CMSProcessable;
 import org.bouncycastle.cms.CMSProcessableByteArray;
 import org.bouncycastle.cms.CMSSignedData;
 import org.bouncycastle.cms.CMSSignedDataGenerator;
+import org.bouncycastle.cms.CMSTypedData;
+import org.bouncycastle.cms.jcajce.JcaSignerInfoGeneratorBuilder;
 import org.bouncycastle.jce.cert.CertStore;
 import org.bouncycastle.jce.cert.CertStoreException;
 import org.bouncycastle.jce.cert.CollectionCertStoreParameters;
 import org.bouncycastle.jce.provider.BouncyCastleProvider;
+import org.bouncycastle.operator.ContentSigner;
+import org.bouncycastle.operator.OperatorCreationException;
+import org.bouncycastle.operator.jcajce.JcaContentSignerBuilder;
+import org.bouncycastle.operator.jcajce.JcaDigestCalculatorProviderBuilder;
+import org.bouncycastle.util.Store;
 import org.bouncycastle.util.encoders.Base64;
 import sun.security.pkcs11.wrapper.PKCS11Exception;
 
@@ -354,12 +365,13 @@ public class JavaApplet extends javax.swing.JApplet {
     }
     
     private void tokenKeystore( String password ) throws IOException, KeyStoreException, NoSuchAlgorithmException, CertificateException{
+        System.out.println("tokenKeystore");
         
         Token token = handler.getTokenActivo();
         token.login( password );
         token.obtenerCertificados();
+        System.out.println("Asignar keystore");  
         keystore = token.getKeystore();
-        
         Enumeration enumer = keystore.aliases();
         for (; enumer.hasMoreElements(); ) {
             String alias = (String) enumer.nextElement();
@@ -436,10 +448,6 @@ public class JavaApplet extends javax.swing.JApplet {
                 fecha= simpDate.format(x509cert.getNotBefore())+"-"+simpDate.format(x509cert.getNotAfter());
                 elem = new String [] {Utiles.getCN(subjectDn), Utiles.getCN(issuerDn),fecha};
                 elementos.add(elem);
-
-                //lista.add(getCN(subjectDn)+" - "+getCN(issuerDn)+" - "+x509cert.getNotAfter());
-                //certs.put(getCN(subjectDn)+" - "+getCN(issuerDn)+" - "+fecha,x509cert);
-                //aliasHash.put(getCN(subjectDn)+" - "+getCN(issuerDn)+" - "+fecha,alias);
                 certs.put(String.valueOf(certs.size()),x509cert);
                 aliasHash.put(String.valueOf(aliasHash.size()),alias);
             }
@@ -1188,6 +1196,7 @@ public class JavaApplet extends javax.swing.JApplet {
             contra=null;
             //Genero la firma
             firmar();
+            
             if(error==1){
                 //Ingresé el password incorrecto. Muestro el panel que informa y permite reingresarlo.
                 setPassError();
@@ -1209,7 +1218,9 @@ public class JavaApplet extends javax.swing.JApplet {
                         token.logout();
                         System.out.println(" *** LOGOUT TOKEN *** ");
                     }
+                    handler.desactivarAllTokens();
                 } 
+                
                 catch (LoginException ex) {
                     Logger.getLogger(JavaApplet.class.getName()).log(Level.SEVERE, null, ex);
                 }                
@@ -1521,15 +1532,53 @@ public class JavaApplet extends javax.swing.JApplet {
         }        
     }
     
-    private void firmarToken() throws GeneralSecurityException, UnsupportedEncodingException {
-        String alias = (String) aliasHash.get(seleccionado);
-        
-        Signature signatureAlgorithm = Signature.getInstance("SHA1withRSA");
-        signatureAlgorithm.initSign((PrivateKey) keystore.getKey(alias, null));
-        signatureAlgorithm.update(hash.getBytes("UnicodeLittleUnmarked"));
-        byte[] digitalSignature = signatureAlgorithm.sign();
-        byte[] base = Base64.decode( digitalSignature );
-        firma = Utiles.convertBase64ToString(base);        
+    private void firmarToken() {
+        try{
+            System.out.println("Firmar token");
+            Token token = handler.getTokenActivo();
+            keystore = token.getKeystore();
+            String alias = (String) aliasHash.get(seleccionado);
+
+            Signature signatureAlgorithm = Signature.getInstance("SHA1withRSA", keystore.getProvider());
+            signatureAlgorithm.initSign((PrivateKey) keystore.getKey(alias, null));
+            signatureAlgorithm.update(hash.getBytes("UnicodeLittleUnmarked"));
+            byte[] digitalSignature = signatureAlgorithm.sign();
+            byte[] base = Base64.encode( digitalSignature );
+            firma = Utiles.convertBase64ToString( base ); 
+            System.out.println("Firma: " + firma);
+            error=0;
+            JSObject win = (JSObject) JSObject.getWindow(this);
+            win.call("appletFirmarJava", new String[]{firma,subform});               
+        }
+        catch(NoSuchAlgorithmException e){
+            e.printStackTrace();
+            error=2;
+            System.out.println("Error firmar token");
+        } 
+        catch (KeyStoreException e) {
+            e.printStackTrace();
+            error=2;
+            System.out.println("Error firmar token");
+        } 
+        catch (InvalidKeyException e) {
+            e.printStackTrace();
+            error=2;
+            System.out.println("Error firmar token");
+        } 
+        catch (UnsupportedEncodingException e) {
+            e.printStackTrace();
+            System.out.println("Error firmar token");
+        } 
+        catch (SignatureException e) {
+            e.printStackTrace();
+            error=2;
+            System.out.println("Error firmar token");
+        }
+        catch (UnrecoverableKeyException e) {
+            e.printStackTrace();
+            error=1;
+            System.out.println("Error firmar token");
+        }        
     }
     
     /**
@@ -1569,22 +1618,95 @@ public class JavaApplet extends javax.swing.JApplet {
             Logger.getLogger(JavaApplet.class.getName()).log(Level.SEVERE, null, ex);
         }
     }
+    
+    private void firmarToken2() {
+        try{
+            System.out.println("firmar token2");
+            error=1;
+            String alias = (String) aliasHash.get(seleccionado);
+            X509Certificate certificado =  (X509Certificate) certs.get(seleccionado);
+            Token token = handler.getTokenActivo();
+            keystore = token.getKeystore();            
+            PrivateKey ky = (PrivateKey) keystore.getKey(alias, null);
+            //Instancio el generador de firmas y le agrego la clave privada para firmar
+            CMSSignedDataGenerator gen = new CMSSignedDataGenerator();
+            Security.addProvider(new BouncyCastleProvider());
+            CMSTypedData msg = new CMSProcessableByteArray(hash.getBytes("UnicodeLittleUnmarked"));
+            ArrayList list2 = new ArrayList();
+            list2.add(certificado);
+            Store certs = new JcaCertStore(list2); 
+            ContentSigner sha1Signer = new JcaContentSignerBuilder("SHA1withRSA").setProvider(keystore.getProvider()).build(ky);            
+            gen.addSignerInfoGenerator(
+                      new JcaSignerInfoGeneratorBuilder(
+                           new JcaDigestCalculatorProviderBuilder().setProvider("BC").build())
+                           .build(sha1Signer, certificado));
+
+            gen.addCertificates(certs);
+            CMSSignedData sigData = gen.generate(msg, false);            
+            byte[] pk = Base64.encode(sigData.getEncoded());
+            // Pasamos el Base64 a un String
+            firma = Utiles.convertBase64ToString(pk);
+            error = 0;
+            JSObject win = (JSObject) JSObject.getWindow(this);
+            win.call("appletFirmarJava", new String[]{firma, subform});            
+           
+        }
+        catch (IOException ex){
+            Logger.getLogger(JavaApplet.class.getName()).log(Level.SEVERE, null, ex);
+            error=2;        
+        }
+        catch (CMSException ex){
+            Logger.getLogger(JavaApplet.class.getName()).log(Level.SEVERE, null, ex);
+            error=2;                
+        }        
+        catch(NoSuchAlgorithmException e){
+            e.printStackTrace();
+            error=2;
+            System.out.println("Error firmar token");
+        } 
+        catch (KeyStoreException e) {
+            e.printStackTrace();
+            error=2;
+            System.out.println("Error firmar token");
+        }  
+        catch (UnrecoverableKeyException e) {
+            e.printStackTrace();
+            error=1;
+            System.out.println("Error firmar token");
+        } 
+        catch (CertificateEncodingException ex) {
+            ex.printStackTrace();
+            error=2;
+            System.out.println("Error firmar token");            
+        } 
+        catch (OperatorCreationException ex) {
+            ex.printStackTrace();
+            error=2;
+            System.out.println("Error firmar token");
+        }
+        
+    }
+    
+    
+    
 
     private void firmar(){
+        System.out.println("firmar");
         error=1;
         String alias = (String) aliasHash.get(seleccionado);
         X509Certificate certificado =  (X509Certificate) certs.get(seleccionado);
         PrivateKey ky;
         try {
             if (esJava){
+                System.out.println("isjava");
                 ky = (PrivateKey) keystore.getKey(alias, contra);
-            }else{
+            }
+            else{
+                System.out.println("noisjava");
                 ky = (PrivateKey) keystore.getKey(alias, null);
             }
             //Instancio el generador de firmas y le agrego la clave privada para firmar
-            CMSSignedDataGenerator generator;
-            generator = new CMSSignedDataGenerator();
-
+            CMSSignedDataGenerator generator = new CMSSignedDataGenerator();
             generator.addSigner(ky, certificado, CMSSignedDataGenerator.DIGEST_SHA1);
             
             ArrayList list = new ArrayList();
@@ -1593,7 +1715,7 @@ public class JavaApplet extends javax.swing.JApplet {
             // Agregamos la cadena certificados
             CertStore chainStore;
             try {
-                chainStore = CertStore.getInstance("Collection", new CollectionCertStoreParameters(list), "BC");
+                    chainStore = CertStore.getInstance("Collection", new CollectionCertStoreParameters(list), "BC");
                 try {
                     generator.addCertificatesAndCRLs(chainStore);
                      // Obtengo el hash a firmar a partir del documento
@@ -1606,7 +1728,8 @@ public class JavaApplet extends javax.swing.JApplet {
                         CMSSignedData signedData;
                         if(esJava){
                             signedData = generator.generate(content, true, "BC");
-                        }else{
+                        }
+                        else{
                             signedData = generator.generate(content, true, keystore.getProvider());
                         }
 

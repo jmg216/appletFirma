@@ -35,6 +35,7 @@ public class Token {
     private String password;
     private Boolean activo;
     private KeyStore keystore;
+    private Provider provider;
     private String pkcs11config;
     private boolean logued;
     private ArrayList<X509Certificate> listaCerts;
@@ -81,16 +82,18 @@ public class Token {
         pkcs11config += Utiles.setKeyValue(UtilesResources.getProperty("appletConfig.paramLibrary"), library);
         pkcs11config += Utiles.setKeyValue(UtilesResources.getProperty("appletConfig.paramShowInfo"), showInfo.toString());
         System.out.println("Config pkcs11: " + pkcs11config);    
-        ByteArrayInputStream confStream = new ByteArrayInputStream(pkcs11config.getBytes());
-        Provider prov = new SunPKCS11(confStream);
+//        ByteArrayInputStream confStream = new ByteArrayInputStream(pkcs11config.getBytes());
+//        Provider prov = new SunPKCS11(confStream);
         activo = true;
+        instanciarKeyStore();
     }
     
     private void instanciarKeyStore() throws KeyStoreException{
         System.out.println("Token::instanciarKeyStore");
         ByteArrayInputStream confStream = new ByteArrayInputStream(pkcs11config.getBytes());
-        Provider prov = new SunPKCS11( confStream );
-        Security.addProvider( prov );
+        provider = new SunPKCS11( confStream );
+        int provd = Security.addProvider( provider );
+        System.out.println("Provider resp: " + provd);
         keystore = KeyStore.getInstance("PKCS11");
     }
     
@@ -159,6 +162,15 @@ public class Token {
     public void setListaCerts(ArrayList<X509Certificate> listaCerts) {
         this.listaCerts = listaCerts;
     }
+
+    public Provider getProvider() {
+        return provider;
+    }
+
+    public void setProvider(Provider provider) {
+        this.provider = provider;
+    }
+   
     
     public void obtenerCertificados() throws IOException, KeyStoreException, NoSuchAlgorithmException, CertificateException {
         
@@ -180,7 +192,7 @@ public class Token {
     }
     
     public void login( String password ) throws IOException, NoSuchAlgorithmException, CertificateException, KeyStoreException{
-        instanciarKeyStore();   
+        //instanciarKeyStore();   
         this.password = password;
         KeyStore.PasswordProtection pp = new KeyStore.PasswordProtection( password.toCharArray() );
         keystore.load(null , pp.getPassword() );
@@ -189,8 +201,9 @@ public class Token {
     
     public void logout() throws LoginException{
         ((SunPKCS11) keystore.getProvider() ).logout();
-        keystore.getProvider().clear();     
+        keystore.getProvider().clear();
+        Security.removeProvider(provider.getName());
         password = null;        
-        logued = false;        
+        logued = false; 
     }
 }
